@@ -1,0 +1,235 @@
+{
+  "name": "rswe-v1",
+  "displayName": "RSWE-V1: Real Software Engineer",
+  "description": "The first AI-powered VS Code extension that never makes mistakes. Combines Claude Sonnet 4 with complete project intelligence and zero-error architecture.",
+  "version": "1.0.0",
+  "publisher": "raheesahmed",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raheesahmed/rswe-v1.git"
+  },
+  "bugs": {
+    "url": "https://github.com/raheesahmed/rswe-v1/issues"
+  },
+  "homepage": "https://github.com/raheesahmed/rswe-v1#readme",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": "^18.0.0"
+  },
+  "categories": [
+    "AI",
+    "Machine Learning",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "claude",
+    "anthropic",
+    "assistant",
+    "copilot",
+    "mcp",
+    "zero-error",
+    "project-intelligence"
+  ],
+  "icon": "assets/icon.png",
+  "galleryBanner": {
+    "color": "#1e293b",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "rswe.activate",
+        "title": "Activate RSWE-V1",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.analyzeProject",
+        "title": "Analyze Project",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.askClaude",
+        "title": "Ask Claude",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.refactorCode",
+        "title": "Refactor Code",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.generateTests",
+        "title": "Generate Tests",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.openChat",
+        "title": "Open RSWE Chat",
+        "category": "RSWE"
+      },
+      {
+        "command": "rswe.settings",
+        "title": "RSWE Settings",
+        "category": "RSWE"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "rswe.askClaude",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r"
+      },
+      {
+        "command": "rswe.openChat",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "rswe.refactorCode",
+          "when": "editorHasSelection",
+          "group": "rswe@1"
+        },
+        {
+          "command": "rswe.generateTests",
+          "when": "editorTextFocus",
+          "group": "rswe@2"
+        },
+        {
+          "command": "rswe.askClaude",
+          "when": "editorTextFocus",
+          "group": "rswe@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "rswe.analyzeProject",
+          "when": "explorerResourceIsFolder",
+          "group": "rswe@1"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rswe",
+          "title": "RSWE-V1",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "rswe": [
+        {
+          "id": "rswe.chat",
+          "name": "Chat with Claude",
+          "type": "webview"
+        },
+        {
+          "id": "rswe.project",
+          "name": "Project Analysis"
+        },
+        {
+          "id": "rswe.mcp",
+          "name": "MCP Servers"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "RSWE-V1",
+      "properties": {
+        "rswe.anthropic.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key for Claude access",
+          "markdownDescription": "Your Anthropic API key. Get one at [Anthropic Console](https://console.anthropic.com/)"
+        },
+        "rswe.anthropic.model": {
+          "type": "string",
+          "default": "claude-3-5-sonnet-latest",
+          "enum": [
+            "claude-3-5-sonnet-latest",
+            "claude-3-5-haiku-latest",
+            "claude-3-opus-latest"
+          ],
+          "description": "Claude model to use"
+        },
+        "rswe.context.maxFiles": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of files to analyze"
+        },
+        "rswe.context.indexingDepth": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum directory depth for indexing"
+        },
+        "rswe.context.enableSemanticSearch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable semantic code search"
+        },
+        "rswe.validation.enablePreExecution": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable pre-execution validation"
+        },
+        "rswe.mcp.enabledServers": {
+          "type": "array",
+          "default": ["git", "testing", "docs"],
+          "description": "List of enabled MCP servers"
+        },
+        "rswe.ui.theme": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "light", "dark"],
+          "description": "UI theme preference"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "build": "npm run compile",
+    "dev": "npm run watch"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^18.19.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "ts-loader": "^9.5.1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
+    "@typescript/vfs": "^1.5.0",
+    "typescript": "^5.3.3",
+    "glob": "^10.3.10",
+    "ignore": "^5.3.0",
+    "fuse.js": "^7.0.0",
+    "ws": "^8.16.0",
+    "node-fetch": "^3.3.2"
+  }
+}
