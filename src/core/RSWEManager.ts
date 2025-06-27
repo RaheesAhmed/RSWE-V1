@@ -1,444 +1,338 @@
 import * as vscode from 'vscode';
-import { ClaudeService } from '../services/ClaudeService';
-import { ProjectAnalyzer } from '../services/ProjectAnalyzer';
-import { MCPManager } from '../services/MCPManager';
-import { ContextManager } from '../services/ContextManager';
-import { ValidationEngine } from '../services/ValidationEngine';
-import { Logger } from '../utils/Logger';
-import { ConfigManager } from '../utils/ConfigManager';
+import Anthropic from '@anthropic-ai/sdk';
+import { 
+	RSWEConfig, 
+	RSWEConfigSchema, 
+	ChatMessage, 
+	ProjectAnalysis, 
+	MCPServer, 
+	ValidationResult,
+	RSWEError,
+	ClaudeError,
+	MCPError 
+} from '@/types';
 
 /**
- * Main RSWE-V1 Manager
- * Orchestrates all services and provides high-level functionality
+ * Core RSWE Manager - The Brain of RSWE-V1
+ * 
+ * Orchestrates all RSWE functionality including:
+ * - Claude Sonnet 4 integration
+ * - Project analysis and context management
+ * - MCP server coordination
+ * - Code validation and error prevention
  */
-export class RSWEManager implements vscode.Disposable {
-    private context: vscode.ExtensionContext | undefined;
-    private isInitialized = false;
-    private disposables: vscode.Disposable[] = [];
-
-    constructor(
-        private claudeService: ClaudeService,
-        private projectAnalyzer: ProjectAnalyzer,
-        private mcpManager: MCPManager,
-        private contextManager: ContextManager,
-        private validationEngine: ValidationEngine
-    ) {}
-
-    /**
-     * Initialize the RSWE manager and all services
-     */
-    async initialize(context: vscode.ExtensionContext): Promise<void> {
-        if (this.isInitialized) {
-            Logger.warn('RSWEManager already initialized');
-            return;
-        }
-
-        try {
-            this.context = context;
-            Logger.info('🔧 Initializing RSWE-V1 Manager...');
-
-            // Initialize configuration
-            await ConfigManager.initialize();
-
-            // Initialize services in dependency order
-            await this.claudeService.initialize();
-            await this.projectAnalyzer.initialize(context);
-            await this.mcpManager.initialize();
-            await this.contextManager.initialize();
-            await this.validationEngine.initialize();
-
-            // Set up workspace listeners
-            this.setupWorkspaceListeners();
-
-            // Initial project analysis if workspace is open
-            if (vscode.workspace.workspaceFolders?.length) {
-                await this.performInitialAnalysis();
-            }
-
-            this.isInitialized = true;
-            Logger.info('✅ RSWE-V1 Manager initialized successfully');
-
-        } catch (error) {
-            Logger.error('❌ Failed to initialize RSWE-V1 Manager', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Activate RSWE for the current workspace
-     */
-    async activate(): Promise<void> {
-        if (!this.isInitialized) {
-            throw new Error('RSWEManager not initialized');
-        }
-
-        try {
-            Logger.info('🚀 Activating RSWE-V1 for workspace...');
-
-            // Validate API key
-            const apiKey = ConfigManager.get('anthropic.apiKey');
-            if (!apiKey) {
-                const action = await vscode.window.showWarningMessage(
-                    'RSWE-V1 requires a Claude API key to function.',
-                    'Configure API Key',
-                    'Learn More'
-                );
-
-                if (action === 'Configure API Key') {
-                    await vscode.commands.executeCommand('rswe.settings');
-                } else if (action === 'Learn More') {
-                    await vscode.env.openExternal(vscode.Uri.parse('https://console.anthropic.com/'));
-                }
-                return;
-            }
-
-            // Test Claude connection
-            const isConnected = await this.claudeService.testConnection();
-            if (!isConnected) {
-                vscode.window.showErrorMessage('Failed to connect to Claude. Please check your API key.');
-                return;
-            }
-
-            // Start project analysis
-            await this.analyzeProject();
-
-            vscode.window.showInformationMessage('🤖 RSWE-V1 is now active and analyzing your project!');
-
-        } catch (error) {
-            Logger.error('❌ Failed to activate RSWE-V1', error);
-            vscode.window.showErrorMessage(`Failed to activate RSWE-V1: ${error}`);
-        }
-    }
-
-    /**
-     * Analyze the current project
-     */
-    async analyzeProject(uri?: vscode.Uri): Promise<void> {
-        if (!this.isInitialized) {
-            return;
-        }
-
-        try {
-            Logger.info('🔍 Starting project analysis...');
-
-            const targetUri = uri || (vscode.workspace.workspaceFolders?.[0]?.uri);
-            if (!targetUri) {
-                vscode.window.showWarningMessage('No workspace folder found to analyze.');
-                return;
-            }
-
-            // Show progress
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: 'RSWE-V1: Analyzing Project',
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ increment: 0, message: 'Scanning files...' });
-                await this.projectAnalyzer.analyzeWorkspace(targetUri);
-
-                progress.report({ increment: 33, message: 'Building context map...' });
-                await this.contextManager.buildContext(targetUri);
-
-                progress.report({ increment: 66, message: 'Indexing for semantic search...' });
-                await this.contextManager.indexForSearch();
-
-                progress.report({ increment: 100, message: 'Analysis complete!' });
-            });
-
-            Logger.info('✅ Project analysis completed');
-            vscode.window.showInformationMessage('🎯 Project analysis complete! RSWE-V1 now has full context.');
-
-        } catch (error) {
-            Logger.error('❌ Project analysis failed', error);
-            vscode.window.showErrorMessage(`Project analysis failed: ${error}`);
-        }
-    }
-
-    /**
-     * Ask Claude with full project context
-     */
-    async askClaude(): Promise<void> {
-        if (!this.isInitialized) {
-            return;
-        }
-
-        try {
-            const question = await vscode.window.showInputBox({
-                prompt: 'Ask Claude anything about your code...',
-                placeHolder: 'e.g., "How can I optimize this function?" or "Add error handling to this class"'
-            });
-
-            if (!question) {
-                return;
-            }
-
-            // Get current context
-            const activeEditor = vscode.window.activeTextEditor;
-            const currentFile = activeEditor?.document.uri;
-            const selectedText = activeEditor?.document.getText(activeEditor.selection);
-
-            // Build context for Claude
-            const context = await this.contextManager.getRelevantContext(question, currentFile);
-
-            // Send to Claude with full context
-            const response = await this.claudeService.sendMessage({
-                question,
-                context,
-                selectedText,
-                currentFile: currentFile?.fsPath
-            });
-
-            // Show response in a new document or webview
-            await this.showClaudeResponse(response, question);
-
-        } catch (error) {
-            Logger.error('❌ Failed to ask Claude', error);
-            vscode.window.showErrorMessage(`Failed to ask Claude: ${error}`);
-        }
-    }
-
-    /**
-     * Refactor selected code with Claude
-     */
-    async refactorCode(): Promise<void> {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (!activeEditor || activeEditor.selection.isEmpty) {
-            vscode.window.showWarningMessage('Please select code to refactor.');
-            return;
-        }
-
-        try {
-            const selectedText = activeEditor.document.getText(activeEditor.selection);
-            const language = activeEditor.document.languageId;
-
-            const refactorType = await vscode.window.showQuickPick([
-                'Optimize Performance',
-                'Improve Readability',
-                'Add Error Handling',
-                'Extract Functions',
-                'Add Type Safety',
-                'Follow Best Practices',
-                'Custom Refactoring...'
-            ], {
-                placeHolder: 'What type of refactoring do you need?'
-            });
-
-            if (!refactorType) {
-                return;
-            }
-
-            let prompt = '';
-            if (refactorType === 'Custom Refactoring...') {
-                const customPrompt = await vscode.window.showInputBox({
-                    prompt: 'Describe the refactoring you want...',
-                    placeHolder: 'e.g., "Convert to async/await" or "Add input validation"'
-                });
-                if (!customPrompt) {
-                    return;
-                }
-                prompt = customPrompt;
-            } else {
-                prompt = refactorType;
-            }
-
-            // Get file context
-            const context = await this.contextManager.getFileContext(activeEditor.document.uri);
-
-            // Send to Claude for refactoring
-            const refactoredCode = await this.claudeService.refactorCode({
-                code: selectedText,
-                language,
-                prompt,
-                context
-            });
-
-            // Validate the refactored code
-            const isValid = await this.validationEngine.validateCode(refactoredCode, language);
-            if (!isValid.isValid) {
-                Logger.warn('Refactored code validation warnings', isValid.issues);
-                const proceed = await vscode.window.showWarningMessage(
-                    'The refactored code has validation warnings. Proceed anyway?',
-                    'Yes', 'No'
-                );
-                if (proceed !== 'Yes') {
-                    return;
-                }
-            }
-
-            // Apply the refactoring
-            await activeEditor.edit(editBuilder => {
-                editBuilder.replace(activeEditor.selection, refactoredCode);
-            });
-
-            vscode.window.showInformationMessage('🔧 Code refactored successfully!');
-
-        } catch (error) {
-            Logger.error('❌ Code refactoring failed', error);
-            vscode.window.showErrorMessage(`Code refactoring failed: ${error}`);
-        }
-    }
-
-    /**
-     * Generate tests for current file
-     */
-    async generateTests(): Promise<void> {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (!activeEditor) {
-            vscode.window.showWarningMessage('Please open a file to generate tests for.');
-            return;
-        }
-
-        try {
-            const document = activeEditor.document;
-            const code = document.getText();
-            const language = document.languageId;
-            const fileName = document.fileName;
-
-            // Get project context for test generation
-            const context = await this.contextManager.getTestContext(document.uri);
-
-            // Generate tests with Claude
-            const tests = await this.claudeService.generateTests({
-                code,
-                language,
-                fileName,
-                context
-            });
-
-            // Determine test file path
-            const testFilePath = this.getTestFilePath(fileName, language);
-
-            // Create test file
-            const testUri = vscode.Uri.file(testFilePath);
-            const testEdit = new vscode.WorkspaceEdit();
-            testEdit.createFile(testUri, { ignoreIfExists: true });
-            testEdit.set(testUri, [vscode.TextEdit.insert(new vscode.Position(0, 0), tests)]);
-
-            await vscode.workspace.applyEdit(testEdit);
-            
-            // Open the test file
-            const testDocument = await vscode.workspace.openTextDocument(testUri);
-            await vscode.window.showTextDocument(testDocument);
-
-            vscode.window.showInformationMessage('🧪 Tests generated successfully!');
-
-        } catch (error) {
-            Logger.error('❌ Test generation failed', error);
-            vscode.window.showErrorMessage(`Test generation failed: ${error}`);
-        }
-    }
-
-    /**
-     * Open RSWE chat interface
-     */
-    async openChat(): Promise<void> {
-        await vscode.commands.executeCommand('rswe.chat.focus');
-    }
-
-    /**
-     * Set up workspace event listeners
-     */
-    private setupWorkspaceListeners(): void {
-        // File change listeners
-        const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*');
-        
-        fileWatcher.onDidCreate(async (uri) => {
-            await this.contextManager.addFile(uri);
-        });
-
-        fileWatcher.onDidChange(async (uri) => {
-            await this.contextManager.updateFile(uri);
-        });
-
-        fileWatcher.onDidDelete(async (uri) => {
-            await this.contextManager.removeFile(uri);
-        });
-
-        this.disposables.push(fileWatcher);
-
-        // Document change listeners
-        this.disposables.push(
-            vscode.workspace.onDidOpenTextDocument(async (document) => {
-                await this.contextManager.trackDocument(document);
-            })
-        );
-
-        this.disposables.push(
-            vscode.workspace.onDidChangeTextDocument(async (event) => {
-                await this.contextManager.updateDocument(event.document);
-            })
-        );
-    }
-
-    /**
-     * Perform initial project analysis
-     */
-    private async performInitialAnalysis(): Promise<void> {
-        try {
-            // Check if user wants auto-analysis
-            const autoAnalyze = ConfigManager.get('context.autoAnalyzeOnStartup', true);
-            if (!autoAnalyze) {
-                return;
-            }
-
-            Logger.info('🔍 Starting initial project analysis...');
-            await this.analyzeProject();
-
-        } catch (error) {
-            Logger.error('❌ Initial project analysis failed', error);
-        }
-    }
-
-    /**
-     * Show Claude response in appropriate format
-     */
-    private async showClaudeResponse(response: string, question: string): Promise<void> {
-        // Create a new untitled document with the response
-        const document = await vscode.workspace.openTextDocument({
-            content: `# Claude Response\n\n**Question:** ${question}\n\n**Answer:**\n\n${response}`,
-            language: 'markdown'
-        });
-
-        await vscode.window.showTextDocument(document);
-    }
-
-    /**
-     * Get test file path based on source file and language
-     */
-    private getTestFilePath(sourceFile: string, language: string): string {
-        const path = require('path');
-        const dir = path.dirname(sourceFile);
-        const name = path.basename(sourceFile, path.extname(sourceFile));
-        
-        // Language-specific test patterns
-        const testPatterns: Record<string, string> = {
-            typescript: `${name}.test.ts`,
-            javascript: `${name}.test.js`,
-            python: `test_${name}.py`,
-            java: `${name}Test.java`,
-            csharp: `${name}Tests.cs`,
-            go: `${name}_test.go`,
-            rust: `${name}_test.rs`
-        };
-
-        const testFileName = testPatterns[language] || `${name}.test.${language}`;
-        return path.join(dir, '__tests__', testFileName);
-    }
-
-    /**
-     * Dispose of all resources
-     */
-    dispose(): void {
-        this.disposables.forEach(d => d.dispose());
-        this.disposables = [];
-        
-        // Dispose services
-        this.claudeService.dispose();
-        this.projectAnalyzer.dispose();
-        this.mcpManager.dispose();
-        this.contextManager.dispose();
-        this.validationEngine.dispose();
-
-        this.isInitialized = false;
-    }
+export class RSWEManager {
+	private config!: RSWEConfig;
+	private claudeClient?: Anthropic;
+	private projectAnalysis: ProjectAnalysis | null = null;
+	private mcpServers: MCPServer[] = [];
+	private isInitialized = false;
+
+	constructor(_context: vscode.ExtensionContext) {
+		// Extension context is available if needed for future features
+	}
+
+	/**
+	 * Initialize the RSWE Manager
+	 */
+	public async initialize(): Promise<void> {
+		try {
+			await this.updateConfiguration();
+			await this._initializeClaudeClient();
+			await this._initializeMCPServers();
+			this.isInitialized = true;
+			console.log('RSWE Manager initialized successfully');
+		} catch (error) {
+			throw new RSWEError(
+				`Failed to initialize RSWE Manager: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				'INIT_ERROR',
+				{ error }
+			);
+		}
+	}
+
+	/**
+	 * Update configuration from VS Code settings
+	 */
+	public async updateConfiguration(): Promise<void> {
+		try {
+			const config = vscode.workspace.getConfiguration('rswe');
+			
+			const rawConfig = {
+				anthropic: {
+					apiKey: config.get<string>('anthropic.apiKey') || '',
+					model: config.get<string>('anthropic.model') || 'claude-3-5-sonnet-latest'
+				},
+				context: {
+					maxFiles: config.get<number>('context.maxFiles') || 10000,
+					enableSemanticSearch: config.get<boolean>('context.enableSemanticSearch') ?? true
+				},
+				validation: {
+					enablePreExecution: config.get<boolean>('validation.enablePreExecution') ?? true
+				},
+				mcp: {
+					enabledServers: config.get<string[]>('mcp.enabledServers') || []
+				}
+			};
+
+			// Validate configuration
+			this.config = RSWEConfigSchema.parse(rawConfig);
+
+			// Reinitialize Claude client if API key changed
+			if (this.isInitialized) {
+				await this._initializeClaudeClient();
+			}
+
+		} catch (error) {
+			if (error instanceof Error && 'issues' in error) {
+				// Zod validation error
+				const validationErrors = (error as any).issues
+					.map((issue: any) => `${issue.path.join('.')}: ${issue.message}`)
+					.join(', ');
+				throw new RSWEError(`Configuration validation failed: ${validationErrors}`, 'CONFIG_ERROR');
+			}
+			throw new RSWEError(`Failed to update configuration: ${error instanceof Error ? error.message : 'Unknown error'}`, 'CONFIG_ERROR');
+		}
+	}
+
+	/**
+	 * Get current configuration (alias for getConfiguration)
+	 */
+	public getConfig(): RSWEConfig | null {
+		return this.config;
+	}
+
+	/**
+	 * Send a chat message to Claude and get response
+	 */
+	public async sendChatMessage(message: string, _context: ChatMessage[] = []): Promise<{
+		content: string;
+		metadata: { tokens: number };
+	}> {
+		if (!this.claudeClient || !this.config) {
+			throw new ClaudeError('Claude client not initialized');
+		}
+
+		try {
+			// System prompt for AI assistance
+			const systemPrompt = `You are RSWE (Real-time Software Engineering), an AI-powered coding assistant integrated with VS Code. You have access to the user's project context and can provide intelligent suggestions, code analysis, and assistance.`;
+
+			const response = await this.claudeClient.messages.create({
+				model: this.config.anthropic.model,
+				max_tokens: 2048,
+				system: systemPrompt,
+				messages: [{ role: 'user', content: message }]
+			});
+
+			const content = response.content[0];
+			if (content.type === 'text') {
+				return {
+					content: content.text,
+					metadata: {
+						tokens: response.usage.output_tokens + response.usage.input_tokens
+					}
+				};
+			}
+			
+			throw new Error('Unexpected response format from Claude');
+		} catch (error) {
+			let errorMessage = 'Unknown error occurred';
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else if (error && typeof error === 'object' && 'message' in error) {
+				errorMessage = `API Error: ${(error as any).message}`;
+			}
+			throw new ClaudeError(errorMessage);
+		}
+	}
+
+	/**
+	 * Analyze the current project
+	 */
+	public async analyzeProject(): Promise<ProjectAnalysis> {
+		if (!vscode.workspace.workspaceFolders) {
+			throw new RSWEError('No workspace folder found', 'NO_WORKSPACE');
+		}
+
+		try {
+			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+			
+			// This is a simplified analysis - in a full implementation,
+			// you would use more sophisticated analysis tools
+			const analysis: ProjectAnalysis = {
+				files: [],
+				dependencies: new Map(),
+				structure: {
+					root: workspaceRoot,
+					src: [],
+					tests: [],
+					configs: [],
+					docs: []
+				},
+				metrics: {
+					totalFiles: 0,
+					totalLines: 0,
+					languages: {},
+					complexity: 0
+				}
+			};
+
+			// Store analysis
+			this.projectAnalysis = analysis;
+			
+			return analysis;
+
+		} catch (error) {
+			throw new RSWEError(
+				`Project analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				'ANALYSIS_ERROR',
+				{ error }
+			);
+		}
+	}
+
+	/**
+	 * Get current project analysis
+	 */
+	public async getProjectAnalysis(): Promise<ProjectAnalysis | null> {
+		return this.projectAnalysis;
+	}
+
+	/**
+	 * Validate code in a document
+	 */
+	public async validateCode(document: vscode.TextDocument): Promise<ValidationResult> {
+		if (!this.config?.validation.enablePreExecution) {
+			return {
+				isValid: true,
+				errors: [],
+				warnings: [],
+				suggestions: []
+			};
+		}
+
+		try {
+			// This is a placeholder - in a full implementation,
+			// you would integrate with language servers, linters, and static analysis tools
+			const result: ValidationResult = {
+				isValid: true,
+				errors: [],
+				warnings: [],
+				suggestions: []
+			};
+
+			return result;
+
+		} catch (error) {
+			throw new RSWEError(
+				`Code validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				'VALIDATION_ERROR',
+				{ document: document.uri.toString() }
+			);
+		}
+	}
+
+	/**
+	 * Get MCP servers
+	 */
+	public async getMCPServers(): Promise<MCPServer[]> {
+		return this.mcpServers;
+	}
+
+	/**
+	 * Refresh MCP servers
+	 */
+	public async refreshMCPServers(): Promise<void> {
+		try {
+			// This is a placeholder - in a full implementation,
+			// you would implement actual MCP server management
+			this.mcpServers = [
+				{
+					id: 'git-server',
+					name: 'Git MCP Server',
+					status: 'connected',
+					transport: 'stdio',
+					tools: [
+						{
+							name: 'git_status',
+							description: 'Get git repository status',
+							parameters: {}
+						},
+						{
+							name: 'git_commit',
+							description: 'Create a git commit',
+							parameters: {
+								message: { type: 'string', description: 'Commit message' }
+							}
+						}
+					],
+					lastPing: new Date()
+				},
+				{
+					id: 'testing-server',
+					name: 'Testing MCP Server',
+					status: 'connected',
+					transport: 'stdio',
+					tools: [
+						{
+							name: 'run_tests',
+							description: 'Run project tests',
+							parameters: {
+								pattern: { type: 'string', description: 'Test pattern to match' }
+							}
+						}
+					],
+					lastPing: new Date()
+				}
+			];
+
+		} catch (error) {
+			throw new MCPError(
+				`Failed to refresh MCP servers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				{ error }
+			);
+		}
+	}
+
+	/**
+	 * Initialize Claude client
+	 */
+	private async _initializeClaudeClient(): Promise<void> {
+		if (!this.config?.anthropic.apiKey) {
+			vscode.window.showWarningMessage(
+				'Claude API key not configured. Please set your Anthropic API key in settings.',
+				'Open Settings'
+			).then((selection: string | undefined) => {
+				if (selection === 'Open Settings') {
+					vscode.commands.executeCommand('workbench.action.openSettings', 'rswe.anthropic.apiKey');
+				}
+			});
+			return;
+		}
+
+		try {
+			this.claudeClient = new Anthropic({
+				apiKey: this.config.anthropic.apiKey
+			});
+			
+			console.log('Claude client initialized successfully');
+		} catch (error) {
+			throw new ClaudeError(`Failed to initialize Claude client: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	/**
+	 * Initialize MCP servers
+	 */
+	private async _initializeMCPServers(): Promise<void> {
+		try {
+			await this.refreshMCPServers();
+			console.log(`Initialized ${this.mcpServers.length} MCP servers`);
+		} catch (error) {
+			console.warn('Failed to initialize MCP servers:', error);
+			// Don't throw - MCP servers are optional
+		}
+	}
+
+
 }

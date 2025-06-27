@@ -1,146 +1,143 @@
 import * as vscode from 'vscode';
-import { RSWEManager } from './core/RSWEManager';
-import { ClaudeService } from './services/ClaudeService';
-import { ProjectAnalyzer } from './services/ProjectAnalyzer';
-import { MCPManager } from './services/MCPManager';
-import { ContextManager } from './services/ContextManager';
-import { ValidationEngine } from './services/ValidationEngine';
-import { ChatProvider } from './providers/ChatProvider';
-import { ProjectProvider } from './providers/ProjectProvider';
-import { MCPProvider } from './providers/MCPProvider';
-import { Logger } from './utils/Logger';
-
-let rsweManager: RSWEManager;
+import { RSWEManager } from '@/core/RSWEManager';
+import { ChatViewProvider } from '@/providers/ChatViewProvider';
+import { ProjectTreeProvider } from '@/providers/ProjectTreeProvider';
+import { MCPTreeProvider } from '@/providers/MCPTreeProvider';
+import { RSWEError } from '@/types';
 
 /**
- * Extension activation entry point
- * Called when VS Code starts up or when the extension is first activated
+ * RSWE-V1 Extension Activation Point
+ * 
+ * This function is called when the extension is activated.
+ * It initializes all core components and sets up the sidebar UI.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-    try {
-        Logger.info('🚀 Activating RSWE-V1 Extension...');
+	try {
+		// Initialize the core RSWE manager
+		const rsweManager = new RSWEManager(context);
+		await rsweManager.initialize();
 
-        // Initialize core services
-        const claudeService = new ClaudeService();
-        const projectAnalyzer = new ProjectAnalyzer();
-        const mcpManager = new MCPManager();
-        const contextManager = new ContextManager();
-        const validationEngine = new ValidationEngine();
+		// Register webview providers for the sidebar
+		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager);
+		const projectProvider = new ProjectTreeProvider(rsweManager);
+		const mcpProvider = new MCPTreeProvider(rsweManager);
 
-        // Initialize main RSWE manager
-        rsweManager = new RSWEManager(
-            claudeService,
-            projectAnalyzer,
-            mcpManager,
-            contextManager,
-            validationEngine
-        );
+		// Register webview views
+		context.subscriptions.push(
+			vscode.window.registerWebviewViewProvider('rswe.chatView', chatProvider, {
+				webviewOptions: {
+					retainContextWhenHidden: true
+				}
+			})
+		);
 
-        // Initialize the manager
-        await rsweManager.initialize(context);
+		// Register tree data providers
+		context.subscriptions.push(
+			vscode.window.registerTreeDataProvider('rswe.projectView', projectProvider),
+			vscode.window.registerTreeDataProvider('rswe.mcpView', mcpProvider)
+		);
 
-        // Register commands
-        registerCommands(context);
+		// Register commands
+		context.subscriptions.push(
+			vscode.commands.registerCommand('rswe.openChat', () => {
+				vscode.commands.executeCommand('rswe.chatView.focus');
+			}),
 
-        // Register providers
-        registerProviders(context);
+			vscode.commands.registerCommand('rswe.analyzeSelection', async (_selection: vscode.Selection) => {
+				try {
+					await rsweManager.analyzeProject();
+					projectProvider.refresh();
+					vscode.window.showInformationMessage('Project analysis completed successfully');
+				} catch (error) {
+					vscode.window.showErrorMessage(`Project analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			}),
 
-        // Show activation message
-        vscode.window.showInformationMessage(
-            '🤖 RSWE-V1 is now active! The first AI that never makes mistakes.',
-            'Open Chat', 'Settings'
-        ).then(selection => {
-            switch (selection) {
-                case 'Open Chat':
-                    vscode.commands.executeCommand('rswe.openChat');
-                    break;
-                case 'Settings':
-                    vscode.commands.executeCommand('rswe.settings');
-                    break;
-            }
-        });
+			vscode.commands.registerCommand('rswe.refreshMcp', async () => {
+				try {
+					await rsweManager.refreshMCPServers();
+					mcpProvider.refresh();
+					vscode.window.showInformationMessage('MCP servers refreshed successfully');
+				} catch (error) {
+					vscode.window.showErrorMessage(`MCP refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			}),
 
-        Logger.info('✅ RSWE-V1 Extension activated successfully');
+			vscode.commands.registerCommand('rswe.validateCode', async () => {
+				const activeEditor = vscode.window.activeTextEditor;
+				if (!activeEditor) {
+					vscode.window.showWarningMessage('No active editor found');
+					return;
+				}
 
-    } catch (error) {
-        Logger.error('❌ Failed to activate RSWE-V1 Extension', error);
-        vscode.window.showErrorMessage(`Failed to activate RSWE-V1: ${error}`);
-    }
+				try {
+					const result = await rsweManager.validateCode(activeEditor.document);
+					if (result.isValid) {
+						vscode.window.showInformationMessage('Code validation passed ');
+					} else {
+						const errorCount = result.errors.length;
+						const warningCount = result.warnings.length;
+						vscode.window.showWarningMessage(
+							`Code validation found ${errorCount} errors and ${warningCount} warnings`
+						);
+					}
+				} catch (error) {
+					vscode.window.showErrorMessage(`Code validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			})
+		);
+
+		// Listen for configuration changes
+		const disposable = vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
+			if (event.affectsConfiguration('rswe')) {
+				rsweManager.updateConfiguration();
+			}
+		});
+		context.subscriptions.push(disposable);
+
+		// Listen for file system changes
+		context.subscriptions.push(
+			vscode.workspace.onDidChangeWorkspaceFolders(async () => {
+				await rsweManager.analyzeProject();
+				projectProvider.refresh();
+			})
+		);
+
+		// Show welcome message
+		vscode.window.showInformationMessage(
+			'🚀 RSWE-V1 activated! Your AI Software Engineer is ready.',
+			'Open Chat',
+			'Analyze Project'
+		).then((selection: string | undefined) => {
+			switch (selection) {
+				case 'Open Chat':
+					vscode.commands.executeCommand('rswe.openChat');
+					break;
+				case 'Analyze Project':
+					vscode.commands.executeCommand('rswe.analyzeProject');
+					break;
+			}
+		});
+
+		console.log('RSWE-V1 extension activated successfully');
+
+	} catch (error) {
+		const errorMessage = error instanceof RSWEError 
+			? `RSWE Error: ${error.message}` 
+			: `Activation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+		
+		vscode.window.showErrorMessage(errorMessage);
+		console.error('RSWE-V1 activation failed:', error);
+		throw error;
+	}
 }
 
 /**
- * Register all VS Code commands
+ * Extension Deactivation Point
+ * 
+ * This function is called when the extension is deactivated.
+ * It performs cleanup operations.
  */
-function registerCommands(context: vscode.ExtensionContext): void {
-    const commands = [
-        vscode.commands.registerCommand('rswe.activate', async () => {
-            await rsweManager.activate();
-        }),
-
-        vscode.commands.registerCommand('rswe.analyzeProject', async (uri?: vscode.Uri) => {
-            await rsweManager.analyzeProject(uri);
-        }),
-
-        vscode.commands.registerCommand('rswe.askClaude', async () => {
-            await rsweManager.askClaude();
-        }),
-
-        vscode.commands.registerCommand('rswe.refactorCode', async () => {
-            await rsweManager.refactorCode();
-        }),
-
-        vscode.commands.registerCommand('rswe.generateTests', async () => {
-            await rsweManager.generateTests();
-        }),
-
-        vscode.commands.registerCommand('rswe.openChat', async () => {
-            await rsweManager.openChat();
-        }),
-
-        vscode.commands.registerCommand('rswe.settings', async () => {
-            await vscode.commands.executeCommand('workbench.action.openSettings', 'rswe');
-        })
-    ];
-
-    commands.forEach(command => context.subscriptions.push(command));
-}
-
-/**
- * Register tree data providers and webview providers
- */
-function registerProviders(context: vscode.ExtensionContext): void {
-    // Chat webview provider
-    const chatProvider = new ChatProvider(context.extensionUri, rsweManager);
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider('rswe.chat', chatProvider)
-    );
-
-    // Project analysis tree provider
-    const projectProvider = new ProjectProvider(rsweManager);
-    context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('rswe.project', projectProvider)
-    );
-
-    // MCP servers tree provider
-    const mcpProvider = new MCPProvider(rsweManager);
-    context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('rswe.mcp', mcpProvider)
-    );
-}
-
-/**
- * Extension deactivation
- */
-export async function deactivate(): Promise<void> {
-    try {
-        Logger.info('🔄 Deactivating RSWE-V1 Extension...');
-        
-        if (rsweManager) {
-            await rsweManager.dispose();
-        }
-
-        Logger.info('✅ RSWE-V1 Extension deactivated successfully');
-    } catch (error) {
-        Logger.error('❌ Error during RSWE-V1 Extension deactivation', error);
-    }
+export function deactivate(): void {
+	console.log('RSWE-V1 extension deactivated');
 }
