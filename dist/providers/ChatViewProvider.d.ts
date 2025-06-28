@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { RSWEManager } from '@/core/RSWEManager';
+import { ProjectContextManager } from '@/core/ProjectContextManager';
 /**
  * Chat View Provider for RSWE-V1 Sidebar
  *
@@ -13,11 +14,17 @@ import { RSWEManager } from '@/core/RSWEManager';
 export declare class ChatViewProvider implements vscode.WebviewViewProvider {
     private readonly _extensionUri;
     private readonly _rsweManager;
+    private readonly _projectContextManager;
     private readonly _context;
     static readonly viewType = "rswe.chatView";
     private _view?;
     private _currentSession;
-    constructor(_extensionUri: vscode.Uri, _rsweManager: RSWEManager, _context: vscode.ExtensionContext);
+    private _isContextLoaded;
+    constructor(_extensionUri: vscode.Uri, _rsweManager: RSWEManager, _projectContextManager: ProjectContextManager, _context: vscode.ExtensionContext);
+    /**
+     * Initialize project context automatically when chat opens
+     */
+    private _initializeProjectContext;
     resolveWebviewView(webviewView: vscode.WebviewView, _context: vscode.WebviewViewResolveContext, _token: vscode.CancellationToken): void;
     private _handleWebviewMessage;
     private _handleSendMessage;

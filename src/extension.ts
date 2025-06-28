@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { RSWEManager } from '@/core/RSWEManager';
+import { ProjectContextManager } from '@/core/ProjectContextManager';
 import { ChatViewProvider } from '@/providers/ChatViewProvider';
 import { ProjectTreeProvider } from '@/providers/ProjectTreeProvider';
 import { MCPTreeProvider } from '@/providers/MCPTreeProvider';
@@ -20,8 +21,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		await rsweManager.initialize();
 		console.log('✅ RSWE-V1: RSWEManager initialized successfully');
 
+		// Initialize ProjectContextManager for real-time context awareness
+		const projectContextManager = new ProjectContextManager(context);
+		console.log('✅ RSWE-V1: ProjectContextManager initialized successfully');
+
 		// Register webview providers for the sidebar
-		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager, context);
+		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager, projectContextManager, context);
 		const projectProvider = new ProjectTreeProvider(rsweManager);
 		const mcpProvider = new MCPTreeProvider(rsweManager);
 

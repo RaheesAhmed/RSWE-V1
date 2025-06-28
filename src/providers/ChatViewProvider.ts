@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
+import { ChatSession, ChatMessage, ChatWebviewMessage } from '@/types';
 import { RSWEManager } from '@/core/RSWEManager';
-import { ChatWebviewMessage, ChatMessage, ChatSession } from '@/types';
+import { ProjectContextManager } from '@/core/ProjectContextManager';
 
 /**
  * Chat View Provider for RSWE-V1 Sidebar
@@ -14,14 +15,52 @@ import { ChatWebviewMessage, ChatMessage, ChatSession } from '@/types';
  */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'rswe.chatView';
+
 	private _view?: vscode.WebviewView;
 	private _currentSession: ChatSession | null = null;
+	//private _chatHistory: ChatSession[] = [];
+	private _isContextLoaded = false;
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
 		private readonly _rsweManager: RSWEManager,
+		private readonly _projectContextManager: ProjectContextManager,
 		private readonly _context: vscode.ExtensionContext
-	) {}
+	) {
+		// Initialize context loading when provider is created
+		this._initializeProjectContext();
+	}
+
+	/**
+	 * Initialize project context automatically when chat opens
+	 */
+	private async _initializeProjectContext(): Promise<void> {
+		if (this._isContextLoaded) return;
+
+		try {
+			console.log('🔍 ChatViewProvider: Auto-loading project context...');
+			const analysis = await this._projectContextManager.initializeProjectContext();
+			
+			if (analysis) {
+				this._isContextLoaded = true;
+				console.log('✅ ChatViewProvider: Project context loaded successfully');
+				
+				// Send context info to webview if available
+				if (this._view) {
+					this._postMessage({
+						type: 'context.loaded',
+						payload: {
+							context: this._projectContextManager.getContextForChat()
+						}
+					});
+				}
+			} else {
+				console.log('⚠️ ChatViewProvider: No workspace found for context loading');
+			}
+		} catch (error) {
+			console.error('❌ ChatViewProvider: Failed to load project context:', error);
+		}
+	}
 
 	public resolveWebviewView(
 		webviewView: vscode.WebviewView,
