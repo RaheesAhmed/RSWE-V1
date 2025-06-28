@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		console.log('✅ RSWE-V1: RSWEManager initialized successfully');
 
 		// Register webview providers for the sidebar
-		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager);
+		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager, context);
 		const projectProvider = new ProjectTreeProvider(rsweManager);
 		const mcpProvider = new MCPTreeProvider(rsweManager);
 

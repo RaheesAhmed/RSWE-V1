@@ -13,6 +13,8 @@
     let messagesContainer;
     let typingIndicator;
     let newChatBtn;
+    let settingsBtn;
+    let historyBtn;
     let welcomeMessage;
 
     // State management
@@ -32,6 +34,8 @@
             messagesContainer = document.getElementById('messagesContainer');
             typingIndicator = document.getElementById('typingIndicator');
             newChatBtn = document.getElementById('newChatBtn');
+            settingsBtn = document.getElementById('settingsBtn');
+            historyBtn = document.getElementById('historyBtn');
             welcomeMessage = document.getElementById('welcomeMessage');
 
             if (!messageInput || !sendButton || !messagesContainer) {
@@ -65,6 +69,16 @@
         // New chat button
         if (newChatBtn) {
             newChatBtn.addEventListener('click', handleNewChat);
+        }
+
+        // Settings button
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', handleSettings);
+        }
+
+        // History button
+        if (historyBtn) {
+            historyBtn.addEventListener('click', handleHistory);
         }
 
         // VS Code message listener
@@ -140,6 +154,9 @@
      */
     function handleNewChat() {
         try {
+            // Save current chat before starting new one
+            saveCurrentChat();
+
             // Clear messages
             messagesContainer.innerHTML = '';
             
@@ -156,7 +173,7 @@
 
             // Clear history
             messageHistory = [];
-            currentSessionId = null;
+            currentSessionId = generateId();
             currentStreamingMessage = null;
 
             // Hide typing indicator
@@ -174,6 +191,71 @@
         } catch (error) {
             console.error('Failed to start new chat:', error);
         }
+    }
+
+    /**
+     * Handle settings
+     */
+    function handleSettings() {
+        try {
+            // Send to VS Code extension to open settings
+            vscode.postMessage({
+                type: 'chat.settings',
+                payload: {}
+            });
+        } catch (error) {
+            console.error('Failed to open settings:', error);
+        }
+    }
+
+    /**
+     * Handle history
+     */
+    function handleHistory() {
+        try {
+            // Send to VS Code extension to show history
+            vscode.postMessage({
+                type: 'chat.history',
+                payload: {}
+            });
+        } catch (error) {
+            console.error('Failed to open history:', error);
+        }
+    }
+
+    /**
+     * Save current chat to storage
+     */
+    function saveCurrentChat() {
+        try {
+            if (messageHistory.length > 0 && currentSessionId) {
+                const chatSession = {
+                    id: currentSessionId,
+                    messages: [...messageHistory],
+                    timestamp: new Date().toISOString(),
+                    title: generateChatTitle(messageHistory[0]?.content || 'New Chat')
+                };
+
+                // Send to VS Code extension for persistence
+                vscode.postMessage({
+                    type: 'chat.save',
+                    payload: { session: chatSession }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to save chat:', error);
+        }
+    }
+
+    /**
+     * Generate chat title from first message
+     */
+    function generateChatTitle(firstMessage) {
+        if (!firstMessage) return 'New Chat';
+        
+        // Take first 30 characters and add ellipsis if needed
+        const title = firstMessage.trim().substring(0, 30);
+        return title.length < firstMessage.trim().length ? title + '...' : title;
     }
 
     /**

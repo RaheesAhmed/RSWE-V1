@@ -9,7 +9,10 @@ import {
 	ValidationResult,
 	RSWEError,
 	ClaudeError,
-	MCPError 
+	MCPError, 
+	ProjectStructure,
+	ProjectFile,
+	ProjectMetrics
 } from '@/types';
 
 /**
@@ -203,7 +206,7 @@ export class RSWEManager {
 	}
 
 	/**
-	 * Analyze the current project
+	 * Analyze the current project with comprehensive codebase intelligence
 	 */
 	public async analyzeProject(): Promise<ProjectAnalysis> {
 		if (!vscode.workspace.workspaceFolders) {
@@ -212,9 +215,9 @@ export class RSWEManager {
 
 		try {
 			const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+			vscode.window.showInformationMessage('🔍 RSWE: Starting comprehensive project analysis...');
 			
-			// This is a simplified analysis - in a full implementation,
-			// you would use more sophisticated analysis tools
+			// Initialize analysis structure
 			const analysis: ProjectAnalysis = {
 				files: [],
 				dependencies: new Map(),
@@ -233,18 +236,305 @@ export class RSWEManager {
 				}
 			};
 
+			// Step 1: Discovery - Find all files
+			const allFiles = await this._discoverProjectFiles(workspaceRoot);
+			console.log(`📁 Discovered ${allFiles.length} files`);
+
+			// Step 2: Classification - Categorize files by type and purpose
+			const classifiedFiles = await this._classifyFiles(allFiles, workspaceRoot);
+			analysis.structure = classifiedFiles.structure;
+
+			// Step 3: Analysis - Deep analyze each code file
+			analysis.files = await this._analyzeCodeFiles(classifiedFiles.codeFiles);
+			console.log(`🔬 Analyzed ${analysis.files.length} code files`);
+
+			// Step 4: Dependency Mapping - Build dependency graph
+			analysis.dependencies = await this._buildDependencyGraph(analysis.files);
+			console.log(`🕸️ Mapped ${analysis.dependencies.size} dependency relationships`);
+
+			// Step 5: Metrics - Calculate project metrics
+			analysis.metrics = await this._calculateProjectMetrics(analysis.files);
+			console.log(`📊 Calculated project metrics: ${analysis.metrics.totalFiles} files, ${analysis.metrics.totalLines} lines`);
+
 			// Store analysis
 			this.projectAnalysis = analysis;
 			
+			vscode.window.showInformationMessage(`✅ RSWE: Project analysis complete! Indexed ${analysis.files.length} files with ${Object.keys(analysis.metrics.languages).length} languages.`);
 			return analysis;
 
 		} catch (error) {
-			throw new RSWEError(
-				`Project analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-				'ANALYSIS_ERROR',
-				{ error }
-			);
+			const errorMsg = `Project analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+			vscode.window.showErrorMessage(`❌ RSWE: ${errorMsg}`);
+			throw new RSWEError(errorMsg, 'ANALYSIS_ERROR', { error });
 		}
+	}
+
+	// ================================
+	// PROJECT INTELLIGENCE METHODS
+	// ================================
+
+	/**
+	 * Step 1: Discover all files in the project
+	 */
+	private async _discoverProjectFiles(workspaceRoot: string): Promise<string[]> {
+		const fs = require('fs').promises;
+		const path = require('path');
+		const files: string[] = [];
+
+		const ignorePatterns = [
+			'node_modules', '.git', '.vscode', 'dist', 'build', 'coverage',
+			'.next', '.nuxt', 'out', 'target', 'bin', 'obj', '.vs',
+			'__pycache__', '.pytest_cache', 'venv', 'env'
+		];
+
+		async function scanDirectory(dir: string): Promise<void> {
+			try {
+				const entries = await fs.readdir(dir, { withFileTypes: true });
+				
+				for (const entry of entries) {
+					const fullPath = path.join(dir, entry.name);
+					const relativePath = path.relative(workspaceRoot, fullPath);
+
+					// Skip ignored directories
+					if (ignorePatterns.some(pattern => relativePath.includes(pattern))) {
+						continue;
+					}
+
+					if (entry.isDirectory()) {
+						await scanDirectory(fullPath);
+					} else if (entry.isFile()) {
+						files.push(fullPath);
+					}
+				}
+			} catch (error) {
+				console.warn(`Failed to scan directory ${dir}:`, error);
+			}
+		}
+
+		await scanDirectory(workspaceRoot);
+		return files;
+	}
+
+	/**
+	 * Step 2: Classify files by type and purpose
+	 */
+	private async _classifyFiles(files: string[], workspaceRoot: string): Promise<{
+		codeFiles: string[];
+		structure: ProjectStructure;
+	}> {
+		const path = require('path');
+		const structure: ProjectStructure = {
+			root: workspaceRoot,
+			src: [],
+			tests: [],
+			configs: [],
+			docs: []
+		};
+
+		const codeFiles: string[] = [];
+		const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt'];
+		const testPatterns = ['test', 'spec', '__test__', '__tests__'];
+		const configFiles = ['package.json', 'tsconfig.json', '.eslintrc', 'webpack.config', 'vite.config', 'next.config', 'tailwind.config'];
+		const docExtensions = ['.md', '.txt', '.rst', '.adoc'];
+
+		for (const filePath of files) {
+			const ext = path.extname(filePath).toLowerCase();
+			const fileName = path.basename(filePath).toLowerCase();
+			const relativePath = path.relative(workspaceRoot, filePath);
+
+			// Classify as code file
+			if (codeExtensions.includes(ext)) {
+				codeFiles.push(filePath);
+
+				// Further classify into src/tests
+				if (testPatterns.some(pattern => fileName.includes(pattern) || relativePath.includes(pattern))) {
+					structure.tests.push(relativePath);
+				} else {
+					structure.src.push(relativePath);
+				}
+			}
+			// Classify as config
+			else if (configFiles.some(pattern => fileName.includes(pattern))) {
+				structure.configs.push(relativePath);
+			}
+			// Classify as documentation
+			else if (docExtensions.includes(ext)) {
+				structure.docs.push(relativePath);
+			}
+		}
+
+		return { codeFiles, structure };
+	}
+
+	/**
+	 * Step 3: Deep analyze code files with AST parsing
+	 */
+	private async _analyzeCodeFiles(codeFiles: string[]): Promise<ProjectFile[]> {
+		const fs = require('fs').promises;
+		const path = require('path');
+		const analyzedFiles: ProjectFile[] = [];
+
+		for (const filePath of codeFiles) {
+			try {
+				const content = await fs.readFile(filePath, 'utf-8');
+				const ext = path.extname(filePath);
+				const stats = await fs.stat(filePath);
+
+				const projectFile: ProjectFile = {
+					path: filePath,
+					relativePath: path.relative(process.cwd(), filePath),
+					name: path.basename(filePath),
+					extension: ext,
+					type: 'file',
+					size: stats.size,
+					lines: content.split('\n').length,
+					language: this._detectLanguage(ext),
+					lastModified: stats.mtime,
+					dependencies: this._extractDependencies(content, ext),
+					exports: this._extractExports(content, ext)
+				};
+
+				analyzedFiles.push(projectFile);
+			} catch (error) {
+				console.warn(`Failed to analyze file ${filePath}:`, error);
+			}
+		}
+
+		return analyzedFiles;
+	}
+
+	/**
+	 * Step 4: Build comprehensive dependency graph
+	 */
+	private async _buildDependencyGraph(files: ProjectFile[]): Promise<Map<string, string[]>> {
+		const dependencyGraph = new Map<string, string[]>();
+
+		for (const file of files) {
+			if (file.dependencies && file.dependencies.length > 0) {
+				dependencyGraph.set(file.path, file.dependencies);
+			}
+		}
+
+		return dependencyGraph;
+	}
+
+	/**
+	 * Step 5: Calculate comprehensive project metrics
+	 */
+	private async _calculateProjectMetrics(files: ProjectFile[]): Promise<ProjectMetrics> {
+		const languages: Record<string, number> = {};
+		let totalLines = 0;
+		let complexity = 0;
+
+		for (const file of files) {
+			totalLines += file.lines;
+			
+			if (file.language) {
+				languages[file.language] = (languages[file.language] || 0) + 1;
+			}
+
+			// Simple complexity calculation
+			complexity += this._calculateFileComplexity(file);
+		}
+
+		return {
+			totalFiles: files.length,
+			totalLines,
+			languages,
+			complexity: Math.round(complexity / files.length)
+		};
+	}
+
+	/**
+	 * Helper: Detect programming language from extension
+	 */
+	private _detectLanguage(extension: string): string {
+		const languageMap: Record<string, string> = {
+			'.js': 'JavaScript',
+			'.ts': 'TypeScript',
+			'.jsx': 'React',
+			'.tsx': 'React TypeScript',
+			'.py': 'Python',
+			'.java': 'Java',
+			'.c': 'C',
+			'.cpp': 'C++',
+			'.cs': 'C#',
+			'.php': 'PHP',
+			'.rb': 'Ruby',
+			'.go': 'Go',
+			'.rs': 'Rust',
+			'.swift': 'Swift',
+			'.kt': 'Kotlin'
+		};
+		return languageMap[extension.toLowerCase()] || 'Unknown';
+	}
+
+	/**
+	 * Helper: Extract dependencies from code content
+	 */
+	private _extractDependencies(content: string, extension: string): string[] {
+		const dependencies: string[] = [];
+
+		if (extension === '.js' || extension === '.ts' || extension === '.jsx' || extension === '.tsx') {
+			// Extract import statements
+			const importRegex = /import.*from\s+['"]([^'"]+)['"]/g;
+			const requireRegex = /require\(['"]([^'"]+)['"]\)/g;
+			
+			let match;
+			while ((match = importRegex.exec(content)) !== null) {
+				dependencies.push(match[1]);
+			}
+			while ((match = requireRegex.exec(content)) !== null) {
+				dependencies.push(match[1]);
+			}
+		} else if (extension === '.py') {
+			// Extract Python imports
+			const importRegex = /(?:from\s+([\w.]+)\s+)?import\s+([\w\s,]+)/g;
+			let match;
+			while ((match = importRegex.exec(content)) !== null) {
+				if (match[1]) dependencies.push(match[1]);
+				if (match[2]) {
+					const modules = match[2].split(',').map(m => m.trim());
+					dependencies.push(...modules);
+				}
+			}
+		}
+
+		return dependencies;
+	}
+
+	/**
+	 * Helper: Extract exports from code content
+	 */
+	private _extractExports(content: string, extension: string): string[] {
+		const exports: string[] = [];
+
+		if (extension === '.js' || extension === '.ts' || extension === '.jsx' || extension === '.tsx') {
+			// Extract export statements
+			const exportRegex = /export\s+(?:default\s+)?(?:class|function|const|let|var)\s+([\w$]+)/g;
+			const namedExportRegex = /export\s+\{([^}]+)\}/g;
+			
+			let match;
+			while ((match = exportRegex.exec(content)) !== null) {
+				exports.push(match[1]);
+			}
+			while ((match = namedExportRegex.exec(content)) !== null) {
+				const namedExports = match[1].split(',').map(e => e.trim());
+				exports.push(...namedExports);
+			}
+		}
+
+		return exports;
+	}
+
+	/**
+	 * Helper: Calculate basic complexity score for a file
+	 */
+	private _calculateFileComplexity(file: ProjectFile): number {
+		// Simple complexity calculation based on file size and dependencies
+		const sizeComplexity = Math.min(file.lines / 100, 10); // Max 10 points for size
+		const depComplexity = (file.dependencies?.length || 0) * 0.5; // 0.5 points per dependency
+		return sizeComplexity + depComplexity;
 	}
 
 	/**

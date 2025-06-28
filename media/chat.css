@@ -87,23 +87,28 @@ html, body {
   gap: var(--space-sm);
 }
 
-.new-chat-btn {
+.header-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-input);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.new-chat-btn:hover {
-  background: var(--bg-input);
+.header-btn:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.header-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Messages Area */
@@ -147,9 +152,7 @@ html, body {
   max-width: 100%;
 }
 
-.message.user {
-  flex-direction: row-reverse;
-}
+
 
 .message-avatar {
   width: 28px;
@@ -163,11 +166,6 @@ html, body {
   font-weight: 500;
   color: var(--text-secondary);
   flex-shrink: 0;
-}
-
-.message.user .message-avatar {
-  background: var(--accent);
-  color: white;
 }
 
 .message-content {
@@ -184,8 +182,8 @@ html, body {
 }
 
 .message.user .message-text {
-  background: var(--accent);
-  color: white;
+  background: transparent;
+  color: var(--text-primary);
 }
 
 /* Markdown Styles */

@@ -19,7 +19,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
-		private readonly _rsweManager: RSWEManager
+		private readonly _rsweManager: RSWEManager,
+		private readonly _context: vscode.ExtensionContext
 	) {}
 
 	public resolveWebviewView(
@@ -53,8 +54,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				case 'chat.send':
 					await this._handleSendMessage(message.payload.message || '');
 					break;
-				case 'chat.clear':
-					await this._handleClearChat();
+				case 'chat.new':
+					this._handleNewChat();
+					break;
+				case 'chat.settings':
+					this._handleSettings();
+					break;
+				case 'chat.history':
+					this._handleHistory();
+					break;
+				case 'chat.save':
+					await this._handleSaveChat(message.payload);
+					break;
+				case 'project.analyze':
+					await this._handleAnalyzeProject();
 					break;
 				case 'chat.export':
 					await this._handleExportChat();
@@ -165,39 +178,95 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	private async _handleClearChat(): Promise<void> {
-		this._createNewSession();
-		this._postMessage({
-			type: 'chat.clear',
-			payload: {}
-		});
-	}
+	// private async _handleClearChat(): Promise<void> {
+	// 	this._createNewSession();
+	// 	this._postMessage({
+	// 		type: 'chat.clear',
+	// 		payload: {}
+	// 	});
+	// }
 
 	private async _handleExportChat(): Promise<void> {
 		if (!this._currentSession || this._currentSession.messages.length === 0) {
-			vscode.window.showWarningMessage('No chat history to export');
+			vscode.window.showWarningMessage('No chat to export');
 			return;
 		}
 
-		const exportData = {
-			session: this._currentSession,
-			exportedAt: new Date().toISOString(),
-			version: '1.0.0'
-		};
+		try {
+			const exportData = {
+				title: this._currentSession.title,
+				messages: this._currentSession.messages,
+				createdAt: this._currentSession.createdAt,
+				updatedAt: new Date()
+			};
 
-		const exportJson = JSON.stringify(exportData, null, 2);
-		
-		const uri = await vscode.window.showSaveDialog({
-			defaultUri: vscode.Uri.file(`rswe-chat-${Date.now()}.json`),
-			filters: {
-				'JSON Files': ['json'],
-				'All Files': ['*']
+			const fileName = `rswe-chat-${Date.now()}.json`;
+			const content = JSON.stringify(exportData, null, 2);
+
+			const saveUri = await vscode.window.showSaveDialog({
+				defaultUri: vscode.Uri.file(fileName),
+				filters: {
+					'JSON Files': ['json']
+				}
+			});
+
+			if (saveUri) {
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content));
+				vscode.window.showInformationMessage(`Chat exported to ${saveUri.fsPath}`);
 			}
-		});
+		} catch (error) {
+			console.error('Export failed:', error);
+			vscode.window.showErrorMessage('Failed to export chat');
+		}
+	}
 
-		if (uri) {
-			await vscode.workspace.fs.writeFile(uri, Buffer.from(exportJson, 'utf8'));
-			vscode.window.showInformationMessage('Chat exported successfully!');
+	private async _handleAnalyzeProject(): Promise<void> {
+		try {
+			// Trigger project analysis
+			const analysis = await this._rsweManager.analyzeProject();
+			
+			// Display analysis results in chat
+			const analysisMessage = `## 🧠 Project Analysis Complete!
+
+**📊 Overview:**
+- **Total Files:** ${analysis.metrics.totalFiles}
+- **Total Lines:** ${analysis.metrics.totalLines.toLocaleString()}
+- **Languages:** ${Object.entries(analysis.metrics.languages).map(([lang, count]) => `${lang} (${count})`).join(', ')}
+- **Average Complexity:** ${analysis.metrics.complexity}/10
+
+**📁 Project Structure:**
+- **Source Files:** ${analysis.structure.src.length}
+- **Test Files:** ${analysis.structure.tests.length}
+- **Config Files:** ${analysis.structure.configs.length}
+- **Documentation:** ${analysis.structure.docs.length}
+
+**🔗 Dependencies:**
+- **Total Dependencies:** ${analysis.dependencies.size}
+- **Most Connected Files:** ${Array.from(analysis.dependencies.entries())
+				.sort(([,a], [,b]) => b.length - a.length)
+				.slice(0, 3)
+				.map(([file, deps]) => `${file} (${deps.length} deps)`)
+				.join(', ')}
+
+✅ **Your project is now fully indexed and ready for intelligent assistance!**`;
+			
+			this._postMessage({
+				type: 'chat.message',
+				payload: {
+					role: 'assistant',
+					content: analysisMessage
+				}
+			});
+
+		} catch (error) {
+			console.error('Project analysis failed:', error);
+			this._postMessage({
+				type: 'chat.message',
+				payload: {
+					role: 'assistant',
+					content: '❌ **Project analysis failed.** Please check that you have a valid workspace open and try again.'
+				}
+			});
 		}
 	}
 
@@ -226,6 +295,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		};
 	}
 
+	private _handleNewChat(): void {
+		this._createNewSession();
+		this._postMessage({
+			type: 'chat.new',
+			payload: {}
+		});
+	}
+
+	private _handleSettings(): void {
+		// Open VS Code settings to RSWE section
+		vscode.commands.executeCommand('workbench.action.openSettings', 'rswe');
+	}
+
+	private _handleHistory(): void {
+		// Focus on the history view
+		vscode.commands.executeCommand('rswe.historyView.focus');
+	}
+
+	private _handleSaveChat(session: any): void {
+		if (session && session.messages && session.messages.length > 0) {
+			// Save to workspace state or global state
+			const chatHistory = this._context.workspaceState.get<any[]>('rswe.chatHistory', []);
+			chatHistory.push(session);
+			this._context.workspaceState.update('rswe.chatHistory', chatHistory);
+			vscode.window.showInformationMessage(`Chat saved: ${session.title}`);
+		}
+	}
+
 	private _postMessage(message: any): void {
 		this._view?.webview.postMessage(message);
 	}
@@ -251,16 +348,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		</head>
 		<body>
 			<div class="chat-container">
-				<div class="chat-header">
-					<div class="header-title">
-						<span class="title-text">RSWE</span>
+					<div class="header">
+						<div class="header-title">
+							<span class="logo">RSWE</span>
+						</div>
+						<div class="header-actions">
+							<button id="settingsBtn" class="header-btn" title="Settings">
+								<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+									<path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/>
+									<path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z"/>
+									<path d="M6.025 8a1.975 1.975 0 1 1 3.95 0 1.975 1.975 0 0 1-3.95 0z"/>
+								</svg>
+							</button>
+							<button id="historyBtn" class="header-btn" title="Chat History">
+								<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+									<path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+									<path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+								</svg>
+							</button>
+							<button id="newChatBtn" class="header-btn" title="Start New Chat">
+								<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+									<path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+								</svg>
+							</button>
+						</div>
 					</div>
-					<div class="header-actions">
-						<button id="newChatBtn" class="new-chat-btn" title="New Chat">
-							<span>+ New Chat</span>
-						</button>
-					</div>
-				</div>
 				
 				<div class="messages-container" id="messagesContainer">
 					<div class="welcome-message" id="welcomeMessage">

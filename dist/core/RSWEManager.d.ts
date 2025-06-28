@@ -50,9 +50,45 @@ export declare class RSWEManager {
         };
     }>;
     /**
-     * Analyze the current project
+     * Analyze the current project with comprehensive codebase intelligence
      */
     analyzeProject(): Promise<ProjectAnalysis>;
+    /**
+     * Step 1: Discover all files in the project
+     */
+    private _discoverProjectFiles;
+    /**
+     * Step 2: Classify files by type and purpose
+     */
+    private _classifyFiles;
+    /**
+     * Step 3: Deep analyze code files with AST parsing
+     */
+    private _analyzeCodeFiles;
+    /**
+     * Step 4: Build comprehensive dependency graph
+     */
+    private _buildDependencyGraph;
+    /**
+     * Step 5: Calculate comprehensive project metrics
+     */
+    private _calculateProjectMetrics;
+    /**
+     * Helper: Detect programming language from extension
+     */
+    private _detectLanguage;
+    /**
+     * Helper: Extract dependencies from code content
+     */
+    private _extractDependencies;
+    /**
+     * Helper: Extract exports from code content
+     */
+    private _extractExports;
+    /**
+     * Helper: Calculate basic complexity score for a file
+     */
+    private _calculateFileComplexity;
     /**
      * Get current project analysis
      */

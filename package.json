@@ -28,29 +28,38 @@
   "main": "./dist/extension.js",
   "contributes": {
     "views": {
-      "rswe-sidebar": [
+      "rswe": [
         {
           "id": "rswe.chatView",
-          "name": "RSWE Assistant",
-          "type": "webview"
+          "name": "Chat",
+          "type": "webview",
+          "icon": "$(comment-discussion)"
+        },
+        {
+          "id": "rswe.historyView",
+          "name": "Chat History",
+          "type": "tree",
+          "icon": "$(history)"
         },
         {
           "id": "rswe.projectView",
           "name": "Project Intelligence",
-          "type": "tree"
+          "type": "tree",
+          "icon": "$(file-code)"
         },
         {
           "id": "rswe.mcpView",
           "name": "MCP Servers",
-          "type": "tree"
+          "type": "tree",
+          "icon": "$(server)"
         }
       ]
     },
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "rswe-sidebar",
-          "title": "RSWE-V1",
+          "id": "rswe",
+          "title": "RSWE",
           "icon": "$(robot)"
         }
       ]

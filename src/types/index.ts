@@ -45,8 +45,12 @@ export interface ChatSession {
 // Project analysis types
 export interface ProjectFile {
   path: string;
+  relativePath: string;
+  name: string;
+  extension: string;
   type: 'file' | 'directory';
-  size?: number;
+  size: number;
+  lines: number;
   language?: string;
   lastModified: Date;
   dependencies?: string[];
@@ -101,10 +105,11 @@ export interface WebviewMessage {
 }
 
 export interface ChatWebviewMessage extends WebviewMessage {
-  type: 'chat.send' | 'chat.clear' | 'chat.export' | 'chat.import';
+  type: 'chat.send' | 'chat.clear' | 'chat.export' | 'chat.import' | 'chat.new' | 'chat.settings' | 'chat.history' | 'chat.save' | 'project.analyze';
   payload: {
     message?: string;
     sessionId?: string;
+    session?: ChatSession;
     data?: any;
   };
 }
