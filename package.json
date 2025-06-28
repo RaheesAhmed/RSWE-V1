@@ -4,6 +4,10 @@
   "description": "The first AI-powered VS Code extension that never makes mistakes. Combines Claude Sonnet 4 with complete project intelligence and MCP integration.",
   "version": "1.0.0",
   "publisher": "raheesahmed",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raheesahmed/rswe-v1.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -20,9 +24,7 @@
     "typescript",
     "zero-error"
   ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "views": {
@@ -142,6 +144,30 @@
             "docs"
           ],
           "description": "List of enabled MCP servers"
+        },
+        "rswe.userSettings": {
+          "type": "object",
+          "properties": {
+            "anthropicApiKey": {
+              "type": "string",
+              "description": "Anthropic API key for user"
+            },
+            "rsweSettings": {
+              "type": "object",
+              "properties": {
+                "enableCodeCompletion": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable code completion"
+                },
+                "enableCodeValidation": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable code validation"
+                }
+              }
+            }
+          }
         }
       }
     }

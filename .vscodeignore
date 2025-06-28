@@ -1,0 +1,46 @@
+# Source files
+src/**
+*.ts
+*.map
+
+# Build files
+webpack.config.js
+tsconfig.json
+
+# Development files
+.eslintrc.json
+.gitignore
+.git/**
+
+# Node modules (only include necessary ones in dist)
+node_modules/**
+!node_modules/vscode
+
+# Documentation
+README.md
+CHANGELOG.md
+docs/**
+
+# Test files
+test/**
+*.test.js
+*.test.ts
+
+# IDE files
+.vscode/**
+.idea/**
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Package files
+*.vsix
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

@@ -38,6 +38,18 @@ export declare class RSWEManager {
         };
     }>;
     /**
+     * Send streaming chat message with real-time updates
+     */
+    sendStreamingChatMessage(message: string, _context: ChatMessage[] | undefined, onProgress: (chunk: {
+        content: string;
+        done: boolean;
+    }) => void): Promise<{
+        content: string;
+        metadata: {
+            tokens: number;
+        };
+    }>;
+    /**
      * Analyze the current project
      */
     analyzeProject(): Promise<ProjectAnalysis>;

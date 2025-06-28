@@ -12,10 +12,13 @@ import { RSWEError } from '@/types';
  * It initializes all core components and sets up the sidebar UI.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	console.log('🚀 RSWE-V1 Extension: Starting activation...');
 	try {
 		// Initialize the core RSWE manager
+		console.log('📦 RSWE-V1: Initializing RSWEManager...');
 		const rsweManager = new RSWEManager(context);
 		await rsweManager.initialize();
+		console.log('✅ RSWE-V1: RSWEManager initialized successfully');
 
 		// Register webview providers for the sidebar
 		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager);
@@ -38,9 +41,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		);
 
 		// Register commands
+		console.log('🔧 RSWE-V1: Registering commands...');
 		context.subscriptions.push(
-			vscode.commands.registerCommand('rswe.openChat', () => {
-				vscode.commands.executeCommand('rswe.chatView.focus');
+			vscode.commands.registerCommand('rswe.openChat', async () => {
+				console.log('🎯 RSWE-V1: rswe.openChat command executed');
+				try {
+					// Focus on the RSWE sidebar first
+					console.log('📂 RSWE-V1: Opening sidebar...');
+					await vscode.commands.executeCommand('workbench.view.extension.rswe-sidebar');
+					// Then focus on the chat view
+					console.log('💬 RSWE-V1: Focusing chat view...');
+					await vscode.commands.executeCommand('rswe.chatView.focus');
+					console.log('✅ RSWE-V1: Chat opened successfully');
+				} catch (error) {
+					console.error('❌ RSWE-V1: Chat open failed:', error);
+					vscode.window.showErrorMessage(`Failed to open RSWE Chat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			}),
+
+			vscode.commands.registerCommand('rswe.analyzeProject', async () => {
+				try {
+					await rsweManager.analyzeProject();
+					projectProvider.refresh();
+					vscode.window.showInformationMessage('Project analysis completed successfully');
+				} catch (error) {
+					vscode.window.showErrorMessage(`Project analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
 			}),
 
 			vscode.commands.registerCommand('rswe.analyzeSelection', async (_selection: vscode.Selection) => {
@@ -86,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				}
 			})
 		);
+		console.log('✅ RSWE-V1: All commands registered successfully');
 
 		// Listen for configuration changes
 		const disposable = vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {

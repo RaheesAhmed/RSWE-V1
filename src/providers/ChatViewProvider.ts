@@ -100,17 +100,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		});
 
 		try {
-			// Get response from Claude via RSWE Manager
-			const response = await this._rsweManager.sendChatMessage(
+			// Create assistant message for streaming
+			const messageId = this._generateId();
+			let fullContent = '';
+
+			// Get streaming response from Claude via RSWE Manager
+			const response = await this._rsweManager.sendStreamingChatMessage(
 				messageContent,
-				this._currentSession.messages
+				this._currentSession.messages,
+				(chunk) => {
+					fullContent = chunk.content;
+					
+					// Send streaming update to webview
+					this._postMessage({
+						type: 'chat.stream',
+						payload: {
+							id: messageId,
+							content: chunk.content,
+							done: chunk.done
+						}
+					});
+				}
 			);
 
-			// Add assistant response to session
+			// Add complete assistant response to session
 			const assistantMessage: ChatMessage = {
-				id: this._generateId(),
+				id: messageId,
 				role: 'assistant' as const,
-				content: response.content,
+				content: fullContent,
 				timestamp: new Date(),
 				metadata: {
 					tokens: response.metadata.tokens,
@@ -120,12 +137,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 			this._currentSession.messages.push(assistantMessage);
 			this._currentSession.updatedAt = new Date();
-
-			// Send response to webview
-			this._postMessage({
-				type: 'chat.message',
-				payload: { message: assistantMessage }
-			});
 
 		} catch (error) {
 			// Add error message to session
@@ -242,45 +253,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			<div class="chat-container">
 				<div class="chat-header">
 					<div class="header-title">
-						<span class="title-icon">🤖</span>
-						<span class="title-text">RSWE Assistant</span>
+						<span class="title-text">RSWE</span>
 					</div>
 					<div class="header-actions">
-						<button id="exportBtn" class="action-btn" title="Export Chat">
-							<span class="codicon codicon-export"></span>
-						</button>
-						<button id="clearBtn" class="action-btn" title="Clear Chat">
-							<span class="codicon codicon-clear-all"></span>
+						<button id="newChatBtn" class="new-chat-btn" title="New Chat">
+							<span>+ New Chat</span>
 						</button>
 					</div>
 				</div>
 				
-				<div class="chat-messages" id="chatMessages">
-					<div class="welcome-message">
-						<div class="welcome-icon">🚀</div>
-						<h3>Welcome to RSWE-V1!</h3>
-						<p>I'm your AI software engineer powered by Claude Sonnet 4. I can help you with:</p>
-						<ul>
-							<li>🔍 Code analysis and debugging</li>
-							<li>🏗️ Architecture planning</li>
-							<li>📝 Documentation generation</li>
-							<li>🧪 Test case creation</li>
-							<li>🔧 Refactoring suggestions</li>
-						</ul>
-						<p>How can I help you today?</p>
+				<div class="messages-container" id="messagesContainer">
+					<div class="welcome-message" id="welcomeMessage">
+						<div class="welcome-title">Welcome to RSWE</div>
+						<div class="welcome-subtitle">Your AI software engineer powered by Claude Sonnet 4. Ask me anything about your code.</div>
 					</div>
 				</div>
 				
-				<div class="typing-indicator" id="typingIndicator" style="display: none;">
+				<div class="typing-indicator hidden" id="typingIndicator">
 					<div class="typing-dots">
-						<span></span>
-						<span></span>
-						<span></span>
+						<div class="typing-dot"></div>
+						<div class="typing-dot"></div>
+						<div class="typing-dot"></div>
 					</div>
-					<span class="typing-text">RSWE is thinking...</span>
+					<span>RSWE is thinking...</span>
 				</div>
 				
-				<div class="chat-input-container">
+				<div class="input-container">
 					<div class="input-wrapper">
 						<textarea
 							id="messageInput"
@@ -288,13 +286,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 							placeholder="Ask me anything about your code..."
 							rows="1"
 						></textarea>
-						<button id="sendBtn" class="send-btn" disabled>
-							<span class="codicon codicon-send"></span>
+						<button id="sendButton" class="send-button" disabled>
+							<svg class="send-icon" viewBox="0 0 16 16">
+								<path d="M1.724 1.053a.75.75 0 0 1 .888-.024L14.836 7.78a.75.75 0 0 1 0 1.44L2.612 15.971a.75.75 0 0 1-.888-.024.75.75 0 0 1-.3-.783L2.1 9.5H6a.5.5 0 0 0 0-1H2.1L1.424 2.836a.75.75 0 0 1 .3-.783Z"/>
+							</svg>
 						</button>
-					</div>
-					<div class="input-footer">
-						<span class="model-info">Powered by Claude Sonnet 4</span>
-						<span class="shortcuts">Press Shift+Enter for new line</span>
 					</div>
 				</div>
 			</div>

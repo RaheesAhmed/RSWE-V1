@@ -120,10 +120,21 @@
                 welcomeMessage.classList.add('hidden');
             }
 
+            // Add user message to UI
+            const userMessage = {
+                id: generateId(),
+                role: 'user',
+                content: message,
+                timestamp: new Date()
+            };
+
+            addMessageToUI(userMessage);
+            messageHistory.push(userMessage);
+
             // Show typing indicator
             showTypingIndicator();
 
-            // Send to VS Code extension - let backend handle adding user message to UI
+            // Send to VS Code extension
             vscode.postMessage({
                 type: 'chat.send',
                 payload: { message: message }

@@ -147,6 +147,62 @@ export class RSWEManager {
 	}
 
 	/**
+	 * Send streaming chat message with real-time updates
+	 */
+	public async sendStreamingChatMessage(
+		message: string,
+		_context: ChatMessage[] = [],
+		onProgress: (chunk: { content: string; done: boolean }) => void
+	): Promise<{ content: string; metadata: { tokens: number } }> {
+		if (!this.claudeClient || !this.config) {
+			throw new ClaudeError('Claude client not initialized');
+		}
+
+		try {
+			// System prompt for AI assistance
+			const systemPrompt = `You are RSWE (Real-time Software Engineering), an AI-powered coding assistant integrated with VS Code. You have access to the user's project context and can provide intelligent suggestions, code analysis, and assistance.`;
+
+			const stream = await this.claudeClient.messages.create({
+				model: this.config.anthropic.model,
+				max_tokens: 2048,
+				system: systemPrompt,
+				messages: [{ role: 'user', content: message }],
+				stream: true
+			});
+
+			let fullContent = '';
+			let totalTokens = 0;
+
+			for await (const chunk of stream) {
+				if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+					fullContent += chunk.delta.text;
+					onProgress({ content: fullContent, done: false });
+				}
+				else if (chunk.type === 'message_delta' && chunk.usage) {
+					totalTokens = chunk.usage.output_tokens;
+				}
+			}
+
+			// Signal completion
+			onProgress({ content: fullContent, done: true });
+
+			return {
+				content: fullContent,
+				metadata: { tokens: totalTokens }
+			};
+
+		} catch (error) {
+			let errorMessage = 'Unknown error occurred';
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else if (error && typeof error === 'object' && 'message' in error) {
+				errorMessage = `API Error: ${(error as any).message}`;
+			}
+			throw new ClaudeError(errorMessage);
+		}
+	}
+
+	/**
 	 * Analyze the current project
 	 */
 	public async analyzeProject(): Promise<ProjectAnalysis> {
