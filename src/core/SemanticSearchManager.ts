@@ -17,13 +17,16 @@ import {
  * - Code pattern matching and similarity search
  */
 export class SemanticSearchManager {
-	private _context: vscode.ExtensionContext;;
+	private readonly _context: vscode.ExtensionContext;
 	private _projectAnalysis: ProjectAnalysis | null = null;
 	private _searchIndex: Map<string, SearchableCodeItem[]> = new Map();
 	private _isIndexed = false;
 
 	constructor(context: vscode.ExtensionContext) {
 		this._context = context;
+		console.log('🔍 SemanticSearchManager: Created instance');
+		// Context stored for future extension integration
+		void this._context; // Acknowledge unused variable
 	}
 
 	/**
