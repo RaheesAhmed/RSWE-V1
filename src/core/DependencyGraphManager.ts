@@ -852,6 +852,39 @@ export class DependencyGraphManager {
 	}
 
 	/**
+	 * Get dependency graph status for integration
+	 */
+	public getGraphStatus(): {
+		isInitialized: boolean;
+		totalNodes: number;
+		totalEdges: number;
+		circularDependencies: number;
+	} {
+		if (!this._isInitialized) {
+			return {
+				isInitialized: false,
+				totalNodes: 0,
+				totalEdges: 0,
+				circularDependencies: 0
+			};
+		}
+
+		let totalEdges = 0;
+		for (const node of this._dependencyGraph.values()) {
+			totalEdges += node.dependencies.length;
+		}
+
+		const circularDeps = this.findCircularDependencies();
+
+		return {
+			isInitialized: this._isInitialized,
+			totalNodes: this._dependencyGraph.size,
+			totalEdges: totalEdges,
+			circularDependencies: circularDeps.length
+		};
+	}
+
+	/**
 	 * Dispose resources and cleanup
 	 */
 	public dispose(): void {

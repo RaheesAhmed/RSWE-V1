@@ -3,13 +3,13 @@ import { z } from 'zod';
 export declare const RSWEConfigSchema: z.ZodObject<{
     anthropic: z.ZodObject<{
         apiKey: z.ZodString;
-        model: z.ZodEnum<["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest"]>;
+        model: z.ZodEnum<["claude-3-5-sonnet-latest", "claude-sonnet-4-20250514", "claude-3-opus-latest"]>;
     }, "strip", z.ZodTypeAny, {
         apiKey: string;
-        model: "claude-3-5-sonnet-latest" | "claude-3-5-haiku-latest" | "claude-3-opus-latest";
+        model: "claude-3-5-sonnet-latest" | "claude-sonnet-4-20250514" | "claude-3-opus-latest";
     }, {
         apiKey: string;
-        model: "claude-3-5-sonnet-latest" | "claude-3-5-haiku-latest" | "claude-3-opus-latest";
+        model: "claude-3-5-sonnet-latest" | "claude-sonnet-4-20250514" | "claude-3-opus-latest";
     }>;
     context: z.ZodObject<{
         maxFiles: z.ZodNumber;
@@ -41,7 +41,7 @@ export declare const RSWEConfigSchema: z.ZodObject<{
     };
     anthropic: {
         apiKey: string;
-        model: "claude-3-5-sonnet-latest" | "claude-3-5-haiku-latest" | "claude-3-opus-latest";
+        model: "claude-3-5-sonnet-latest" | "claude-sonnet-4-20250514" | "claude-3-opus-latest";
     };
     context: {
         maxFiles: number;
@@ -56,7 +56,7 @@ export declare const RSWEConfigSchema: z.ZodObject<{
     };
     anthropic: {
         apiKey: string;
-        model: "claude-3-5-sonnet-latest" | "claude-3-5-haiku-latest" | "claude-3-opus-latest";
+        model: "claude-3-5-sonnet-latest" | "claude-sonnet-4-20250514" | "claude-3-opus-latest";
     };
     context: {
         maxFiles: number;

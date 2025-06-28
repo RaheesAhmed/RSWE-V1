@@ -198,6 +198,15 @@ export declare class DependencyGraphManager {
      */
     private _getFileTypeDistribution;
     /**
+     * Get dependency graph status for integration
+     */
+    getGraphStatus(): {
+        isInitialized: boolean;
+        totalNodes: number;
+        totalEdges: number;
+        circularDependencies: number;
+    };
+    /**
      * Dispose resources and cleanup
      */
     dispose(): void;

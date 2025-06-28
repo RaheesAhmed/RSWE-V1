@@ -517,6 +517,26 @@ export class SemanticSearchManager {
 	}
 
 	/**
+	 * Get semantic search index status for integration
+	 */
+	public getIndexStatus(): {
+		isIndexed: boolean;
+		indexedFiles: number;
+		searchableItems: number;
+	} {
+		let totalItems = 0;
+		for (const items of this._searchIndex.values()) {
+			totalItems += items.length;
+		}
+
+		return {
+			isIndexed: this._isIndexed,
+			indexedFiles: this._searchIndex.size,
+			searchableItems: totalItems
+		};
+	}
+
+	/**
 	 * Dispose resources and cleanup
 	 */
 	public dispose(): void {

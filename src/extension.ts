@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { RSWEManager } from '@/core/RSWEManager';
 import { ProjectContextManager } from '@/core/ProjectContextManager';
+import { SemanticSearchManager } from '@/core/SemanticSearchManager';
+import { DependencyGraphManager } from '@/core/DependencyGraphManager';
 import { ChatViewProvider } from '@/providers/ChatViewProvider';
 import { ProjectTreeProvider } from '@/providers/ProjectTreeProvider';
 import { MCPTreeProvider } from '@/providers/MCPTreeProvider';
@@ -25,8 +27,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const projectContextManager = new ProjectContextManager(context);
 		console.log('✅ RSWE-V1: ProjectContextManager initialized successfully');
 
+		// Initialize SemanticSearchManager for intelligent code search
+		const semanticSearchManager = new SemanticSearchManager(context);
+		console.log('✅ RSWE-V1: SemanticSearchManager initialized successfully');
+
+		// Initialize DependencyGraphManager for dependency analysis
+		const dependencyGraphManager = new DependencyGraphManager(context);
+		console.log('✅ RSWE-V1: DependencyGraphManager initialized successfully');
+
 		// Register webview providers for the sidebar
-		const chatProvider = new ChatViewProvider(context.extensionUri, rsweManager, projectContextManager, context);
+		const chatProvider = new ChatViewProvider(
+			context.extensionUri, 
+			rsweManager, 
+			projectContextManager, 
+			semanticSearchManager,
+			dependencyGraphManager,
+			context
+		);
 		const projectProvider = new ProjectTreeProvider(rsweManager);
 		const mcpProvider = new MCPTreeProvider(rsweManager);
 

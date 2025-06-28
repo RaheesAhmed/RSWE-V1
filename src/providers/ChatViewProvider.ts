@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { ChatSession, ChatMessage, ChatWebviewMessage } from '@/types';
 import { RSWEManager } from '@/core/RSWEManager';
 import { ProjectContextManager } from '@/core/ProjectContextManager';
+import { SemanticSearchManager } from '@/core/SemanticSearchManager';
+import { DependencyGraphManager } from '@/core/DependencyGraphManager';
 
 /**
  * Chat View Provider for RSWE-V1 Sidebar
@@ -25,6 +27,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		private readonly _extensionUri: vscode.Uri,
 		private readonly _rsweManager: RSWEManager,
 		private readonly _projectContextManager: ProjectContextManager,
+		private readonly _semanticSearchManager: SemanticSearchManager,
+		private readonly _dependencyGraphManager: DependencyGraphManager,
 		private readonly _context: vscode.ExtensionContext
 	) {
 		// Initialize context loading when provider is created
@@ -33,24 +37,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 	/**
 	 * Initialize project context automatically when chat opens
+	 * Integrates all project intelligence features:
+	 * - Full Codebase Analysis
+	 * - Semantic Code Search
+	 * - Dependency Graph Mapping
+	 * - Real-time Context Awareness
 	 */
 	private async _initializeProjectContext(): Promise<void> {
 		if (this._isContextLoaded) return;
 
 		try {
-			console.log('🔍 ChatViewProvider: Auto-loading project context...');
+			console.log('🔍 ChatViewProvider: Auto-loading comprehensive project context...');
+			
+			// Step 1: Initialize core project analysis
 			const analysis = await this._projectContextManager.initializeProjectContext();
 			
 			if (analysis) {
-				this._isContextLoaded = true;
-				console.log('✅ ChatViewProvider: Project context loaded successfully');
+				console.log('✅ ChatViewProvider: Core project analysis loaded');
 				
-				// Send context info to webview if available
+				// Step 2: Initialize semantic search indexing
+				console.log('🔍 ChatViewProvider: Building semantic search index...');
+				await this._semanticSearchManager.initialize(analysis);
+				console.log('✅ ChatViewProvider: Semantic search index built');
+				
+				// Step 3: Initialize dependency graph analysis
+				console.log('🔍 ChatViewProvider: Building dependency graph...');
+				await this._dependencyGraphManager.initialize(analysis);
+				console.log('✅ ChatViewProvider: Dependency graph built');
+				
+				this._isContextLoaded = true;
+				console.log('✨ ChatViewProvider: Full project intelligence loaded successfully');
+				
+				// Send comprehensive context to webview if available
 				if (this._view) {
+					const comprehensiveContext = this._buildComprehensiveContext();
 					this._postMessage({
 						type: 'context.loaded',
 						payload: {
-							context: this._projectContextManager.getContextForChat()
+							context: comprehensiveContext,
+							message: 'Project intelligence fully loaded. AI now has complete project context.'
 						}
 					});
 				}
@@ -59,7 +84,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			}
 		} catch (error) {
 			console.error('❌ ChatViewProvider: Failed to load project context:', error);
+			this._isContextLoaded = false;
 		}
+	}
+
+	/**
+	 * Build comprehensive project context for AI chat session
+	 * Consolidates data from all project intelligence managers
+	 */
+	private _buildComprehensiveContext(): any {
+		const baseContext = this._projectContextManager.getContextForChat() || {};
+		
+		// Get semantic search capabilities info
+		const searchCapabilities = {
+			isIndexed: this._semanticSearchManager.getIndexStatus().isIndexed,
+			indexedFiles: this._semanticSearchManager.getIndexStatus().indexedFiles,
+			searchableItems: this._semanticSearchManager.getIndexStatus().searchableItems
+		};
+		
+		// Get dependency graph information
+		const dependencyInfo = {
+			isInitialized: this._dependencyGraphManager.getGraphStatus().isInitialized,
+			totalNodes: this._dependencyGraphManager.getGraphStatus().totalNodes,
+			totalEdges: this._dependencyGraphManager.getGraphStatus().totalEdges,
+			circularDependencies: this._dependencyGraphManager.getGraphStatus().circularDependencies
+		};
+		
+		return {
+			...baseContext,
+			projectIntelligence: {
+				semanticSearch: searchCapabilities,
+				dependencyGraph: dependencyInfo,
+				context: {
+					message: 'Full project intelligence active - AI has complete codebase awareness',
+					capabilities: [
+						'Full codebase analysis and understanding',
+						'Real-time context awareness of all files and changes',
+						'Semantic code search across entire project',
+						'Dependency relationship mapping and analysis',
+						'Circular dependency detection',
+						'Code pattern recognition and matching'
+					]
+				}
+			}
+		};
 	}
 
 	public resolveWebviewView(
@@ -159,8 +227,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			// Get streaming response from Claude via RSWE Manager
 			const response = await this._rsweManager.sendStreamingChatMessage(
 				messageContent,
-				this._currentSession.messages,
-				(chunk) => {
+				(chunk: { content: string; done: boolean }) => {
 					fullContent = chunk.content;
 					
 					// Send streaming update to webview

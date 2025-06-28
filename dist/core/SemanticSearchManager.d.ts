@@ -88,6 +88,14 @@ export declare class SemanticSearchManager {
      */
     updateIndex(updatedFiles: ProjectFile[]): Promise<void>;
     /**
+     * Get semantic search index status for integration
+     */
+    getIndexStatus(): {
+        isIndexed: boolean;
+        indexedFiles: number;
+        searchableItems: number;
+    };
+    /**
      * Dispose resources and cleanup
      */
     dispose(): void;

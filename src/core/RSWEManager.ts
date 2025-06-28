@@ -154,8 +154,9 @@ export class RSWEManager {
 	 */
 	public async sendStreamingChatMessage(
 		message: string,
-		_context: ChatMessage[] = [],
-		onProgress: (chunk: { content: string; done: boolean }) => void
+		
+		onProgress: (chunk: { content: string; done: boolean }) => void,
+		
 	): Promise<{ content: string; metadata: { tokens: number } }> {
 		if (!this.claudeClient || !this.config) {
 			throw new ClaudeError('Claude client not initialized');

@@ -5,7 +5,7 @@ import { z } from 'zod';
 export const RSWEConfigSchema = z.object({
   anthropic: z.object({
     apiKey: z.string().min(1),
-    model: z.enum(['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'])
+    model: z.enum(['claude-3-5-sonnet-latest', 'claude-sonnet-4-20250514', 'claude-3-opus-latest'])
   }),
   context: z.object({
     maxFiles: z.number().min(1).max(100000),
